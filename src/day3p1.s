@@ -85,41 +85,6 @@ _start:
     addi    sp, sp, -4
     sw      a0, 0(sp)
 
-    # li      a0, 12341234
-    # dbg
-    # call    .is_repeated
-    # dbg
-    #
-    # li      a0, 123123123
-    # dbg
-    # call    .is_repeated
-    # dbg
-    #
-    # li      a0, 1212121212
-    # dbg
-    # call    .is_repeated
-    # dbg
-    #
-    # li      a0, 1111111
-    # dbg
-    # call    .is_repeated
-    # dbg
-    #
-    # li      a0, 123456
-    # dbg
-    # call    .is_repeated
-    # dbg
-    #
-    # li      a0, 1001
-    # dbg
-    # call    .is_repeated
-    # dbg
-    #
-    # li      a0, 101
-    # dbg
-    # call    .is_repeated
-    # dbg
-
     call    .main
 
     lw      a0, 0(sp)
@@ -136,14 +101,14 @@ _start:
     sd      s1, 16(sp)  # buffer start
     sd      s2, 24(sp)  # buffer head
     sd      s3, 32(sp)  # buffer end
-    sd      s4, 40(sp)  # range end
+    sd      s4, 40(sp)  # line end
     sd      s5, 48(sp)  # sep index
-    sd      s6, 56(sp)  # range iter val
-    sd      s7, 56(sp)  # range iter end
-    sd      s8, 64(sp)  # invalid id sum
+    sd      s6, 56(sp)  # first battery value
+    sd      s7, 56(sp)  # battery sum
+    sd      s8, 64(sp)  #
 
     mv      s0, a0 
-    li      s8, 0
+    li      s7, 0
 
     addi    sp, sp, -128
     mv      s1, sp
@@ -159,60 +124,37 @@ _start:
     add     s3, s2, a0
     mv      s2, s1
 
-.main.process_range:
-    mv      a0, s2
-    sub     a1, s3, s2
-    li      a2, ','
-    call    .find
-    bge     a0, zero, .main.found_range_end
-
+.main.process_line:
     mv      a0, s2
     sub     a1, s3, s2
     li      a2, '\n'
     call    .find
     blt     a0, zero, .main.reset_read_buffer
-.main.found_range_end:
+    beqz    a0, .main.end
     mv      s4, a0
 
     mv      a0, s2
-    mv      a1, s4
-    li      a2, '-'
-    call    .find
-    blt     a0, zero, .main.find_sep_error
-    mv      s5, a0
-
-    add     a0, s2, s5
-    addi    a0, a0, 1
-    sub     a1, s4, s5
-    addi    a1, a1, -1
-    call    .ascii_decimal_to_int
-    mv      s7, a0
-
-    mv      a0, s2
-    mv      a1, s5
-    call    .ascii_decimal_to_int
+    addi    a1, s4, -1
+    call    .max_u8
     mv      s6, a0
 
-    j       .main.range_loop
+    add     a0, s2, a1
+    addi    a0, a0, 1
+    sub     a1, s4, a1
+    addi    a1, a1, -1
+    call    .max_u8
 
-.main.range_loop.iter:
-    addi    s6, s6, 1
-    bgt     s6, s7, .main.range_loop.end
-.main.range_loop:
-    mv      a0, s6
-    call    .is_repeated
-    beqz    a0, .main.range_loop.iter
-.main.range_val_is_repeated:
-    add     s8, s8, s6
-    j       .main.range_loop.iter
+    addi    t0, s6, -'0'
+    addi    t1, a0, -'0'
+    li      t3, 10
+    mul     t0, t0, t3
+    add     t0, t0, t1
+    add     s7, s7, t0
 
-.main.range_loop.end:
-    add     t0, s2, s4
-    lb      t1, (t0)
-    li      t2, '\n'
-    addi    s2, t0, 1
-    bne     t1, t2, .main.process_range
-    j       .main.end
+    add     s2, s2, s4
+    addi    s2, s2, 1
+
+    j       .main.process_line
 
 .main.reset_read_buffer:
     sub     a0, s3, s2
@@ -223,7 +165,7 @@ _start:
     j       .main.get_input
 
 .main.end:
-    mv      a0, s8
+    mv      a0, s7
     call    .println_u64
     addi    sp, sp, 128
     ld      ra, (sp)
@@ -253,42 +195,30 @@ _start:
     la      a1, find_sep_error_msg_len
 
 
-.is_repeated:   # a0: val
-                # ---
-                # a0: 0 if not, 1 if true
-    li      t0, 10
-    li      t1, 10
-    li      t2, 10000000000000
-    j       .is_repeated.loop
-.is_repeated.loop.iter:
-    mul     t1, t1, t0
-.is_repeated.loop:
-    rem     t3, a0, t1
-    mul     t4, t3, t0
-    blt     t4, t1, .is_repeated.continue
-    # dbg     t1
-    # dbg     t3
-    li      t4, 0
-    mv      a7, a0
-.is_repeated.count_loop:
-    # dbg     a7
-    div     t5, a7, t1
-    rem     t6, a7, t1
-    bne     t6, t3, .is_repeated.continue
-    addi    t4, t4, 1
-    mv      a7, t5
-    bnez    a7, .is_repeated.count_loop
-.is_repeated.count_loop.break:
-    li      t5, 2
-    bge     t4, t5, .is_repeated.success
-.is_repeated.continue:
-    blt     t1, t2, .is_repeated.loop.iter
-.is_repeated.fail:
-    li      a0, 0
+.max_u8:    # a0: buf
+            # a1: buf.len
+            # ---
+            # a0: max value (0 if buf.len==0)
+            # a1: max index (0 if buf.len==0)
+    li      t0, 0 # i
+    li      t1, 0 # argmax
+    li      t2, 0 # max
+    beqz    a1, .max_u8.return
+.max_u8.loop:
+    add     t3, a0, t0
+    lbu     t4, (t3)
+    bleu    t4, t2, .max_u8.loop.continue
+    mv      t1, t0
+    mv      t2, t4
+.max_u8.loop.continue:
+    addi    t0, t0, 1
+    beq     t0, a1, .max_u8.return
+    j       .max_u8.loop
+.max_u8.return:
+    mv      a0, t2
+    mv      a1, t1
     ret
-.is_repeated.success:
-    li      a0, 1
-    ret
+
     
 .byte_copy: # a0: len
             # a1: src
@@ -571,7 +501,7 @@ _start:
 
     .section .rodata
 file:
-    .ascii  "data/day2d\0"
+    .ascii  "data/day3d\0"
     .set    file_len, .-file
 read_fail:
     .ascii  "Failed to read from file"
