@@ -20,7 +20,7 @@ Run with
 qemu-system-riscv64 -machine 'virt' -cpu 'rv64' -m 1G -device virtio-blk-device,drive=hd -drive file=./system/overlay.qcow2,if=none,id=hd -device virtio-net-device,netdev=net -netdev user,id=net,hostfwd=tcp:127.0.0.1:2222-:22 -bios /usr/share/qemu/opensbi-riscv64-generic-fw_dynamic.bin -kernel ./system/uboot.elf -object rng-random,filename=/dev/urandom,id=rng -device virtio-rng-device,rng=rng -nographic -append "root=LABEL=rootfs console=ttyS0" -virtfs local,path=src,mount_tag=host0,security_model=passthrough,id=host0
 ```
 
-To install sudo, login with user and pass `root`; run `apt update` and `apt install sudo`
+To install sudo, login with user and pass `root`; run `apt update` and `apt install sudo`; add `debian` to sudoers with `usermod -aG debian sudo`
 
 User and pass are `debian`
 
